@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -48,7 +49,9 @@ func main() {
 		callerID    = flag.String("caller-id", "Standup · Meet", "From display name")
 		captureName = flag.String("capture", "BlackHole 2ch", "capture device, substring match")
 		playbackNam = flag.String("playback", "BlackHole 16ch", "playback device, substring match")
+		bindHost    = flag.String("bind", "", "local SIP and media address, empty means the en0 address")
 		bindPort    = flag.Int("port", 15060, "local SIP port")
+		waitRegist  = flag.Bool("wait-register", false, "wait for a phone to register, then ring it")
 		answerPort  = flag.Int("answer", 0, "also run an in-process echo answerer on this port")
 		duration    = flag.Duration("dur", 10*time.Minute, "how long to run")
 	)
@@ -76,8 +79,10 @@ func main() {
 		callerID:     *callerID,
 		captureName:  *captureName,
 		playbackName: *playbackNam,
+		bindHost:     *bindHost,
 		bindPort:     *bindPort,
 		answerPort:   *answerPort,
+		waitRegister: *waitRegist,
 		duration:     *duration,
 	}); err != nil {
 		log.Fatal(err)
@@ -89,8 +94,10 @@ type opts struct {
 	callerID     string
 	captureName  string
 	playbackName string
+	bindHost     string
 	bindPort     int
 	answerPort   int
+	waitRegister bool
 	duration     time.Duration
 }
 
@@ -141,25 +148,51 @@ func run(ctx context.Context, mctx malgo.Context, o opts) error {
 
 	// The call comes second. If TCC blocks microphone access, the audio devices fail
 	// first and we learn that without waiting for a phone to answer.
-	uri := sip.Uri{}
-	if err := sip.ParseUri(o.callURI, &uri); err != nil {
-		return fmt.Errorf("parse %q: %w", o.callURI, err)
+	bindHost := o.bindHost
+	if bindHost == "" {
+		bindHost = lanAddress()
 	}
 
 	ua, err := sipgo.NewUA()
 	if err != nil {
 		return fmt.Errorf("new user agent: %w", err)
 	}
+
+	reg := &registrar{ready: make(chan sip.Uri, 1)}
+	srv, err := sipgo.NewServer(ua)
+	if err != nil {
+		return fmt.Errorf("new server: %w", err)
+	}
+	srv.OnRegister(reg.handle)
+
 	dg := diago.NewDiago(ua,
+		diago.WithServer(srv),
 		diago.WithTransport(diago.Transport{
 			Transport: "udp",
-			BindHost:  "127.0.0.1",
+			BindHost:  bindHost,
 			BindPort:  o.bindPort,
 		}),
 		diago.WithMediaConfig(diago.MediaConfig{
 			Codecs: []media.Codec{media.CodecAudioUlaw},
 		}),
 	)
+
+	if err := dg.ServeBackground(ctx, func(*diago.DialogServerSession) {}); err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	log.Printf("sip on %s:%d, media on %s", bindHost, o.bindPort, bindHost)
+
+	uri := sip.Uri{}
+	if o.waitRegister {
+		log.Printf("waiting for a phone to register, point it at %s:%d", bindHost, o.bindPort)
+		select {
+		case uri = <-reg.ready:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	} else if err := sip.ParseUri(o.callURI, &uri); err != nil {
+		return fmt.Errorf("parse %q: %w", o.callURI, err)
+	}
 
 	// Passing a From header here is the open question: sipgo builds its own, so a
 	// second one may make the request invalid rather than setting caller ID.
@@ -336,6 +369,50 @@ func openPlayback(mctx malgo.Context, dev malgo.DeviceInfo, in *ring, c *counter
 			c.hostPlayed.Add(int64(n))
 		},
 	})
+}
+
+// registrar accepts any REGISTER and remembers where to ring back. No authentication:
+// the spike is not the place to decide how credentials work.
+type registrar struct {
+	ready chan sip.Uri
+	once  sync.Once
+}
+
+func (r *registrar) handle(req *sip.Request, tx sip.ServerTransaction) {
+	contact := req.Contact()
+	res := sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)
+	if contact != nil {
+		res.AppendHeader(contact)
+		r.once.Do(func() {
+			log.Printf("registered %s from %s", contact.Address.String(), req.Source())
+			r.ready <- contact.Address
+		})
+	}
+	if expires := req.GetHeader("Expires"); expires != nil {
+		res.AppendHeader(expires)
+	}
+	if err := tx.Respond(res); err != nil {
+		log.Printf("register respond: %v", err)
+	}
+}
+
+// lanAddress returns the first non-loopback IPv4 address, which is what a phone on
+// the same network can actually reach.
+func lanAddress() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "127.0.0.1"
+	}
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		if v4 := ipnet.IP.To4(); v4 != nil {
+			return v4.String()
+		}
+	}
+	return "127.0.0.1"
 }
 
 // serveEcho answers anything that rings it and sends the RTP straight back.
