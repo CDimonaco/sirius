@@ -9,7 +9,7 @@ rules:
   proposal:
     - Say how the change avoids integrating with a meeting platform.
     - Include a "Non-goals" section.
-  spec:
+  specs:
     - Scope requirements to observable behaviour, never to implementation detail.
       Name a component only where the requirement is genuinely about it.
     - Give audio-path requirements measurable criteria such as latency, sample drift
