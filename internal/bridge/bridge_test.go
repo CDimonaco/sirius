@@ -78,11 +78,11 @@ func TestStallIsCountedAsStall(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := c.Stalls.Load(); got != 1 {
-		t.Fatalf("stalls = %d, want 1", got)
+	if got := c.Gaps.Load(); got != 1 {
+		t.Fatalf("gaps = %d, want 1", got)
 	}
-	if got := c.StalledMillis.Load(); got != 200 {
-		t.Fatalf("stalled millis = %d, want 200", got)
+	if got := c.GapMillis.Load(); got != 200 {
+		t.Fatalf("gap millis = %d, want 200", got)
 	}
 	if got := c.SilencePauses.Load(); got != 0 {
 		t.Fatalf("silence pauses = %d, want 0", got)
@@ -110,8 +110,8 @@ func TestSuppressedSilenceIsNotAStall(t *testing.T) {
 	if got := c.SilentMillis.Load(); got != 3000 {
 		t.Fatalf("silent millis = %d, want 3000", got)
 	}
-	if got := c.Stalls.Load(); got != 0 {
-		t.Fatalf("stalls = %d, want 0", got)
+	if got := c.Gaps.Load(); got != 0 {
+		t.Fatalf("gaps = %d, want 0", got)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestJitterWithinThresholdIsNotCounted(t *testing.T) {
 	if err := pumpFromPhone(context.Background(), replay(clock, arrivals), audio.NewRing(depth()), clock.now, &c); err != nil {
 		t.Fatal(err)
 	}
-	if c.Stalls.Load() != 0 || c.SilencePauses.Load() != 0 {
+	if c.Gaps.Load() != 0 || c.SilencePauses.Load() != 0 {
 		t.Fatalf("counted a gap of 50ms: %s", c.String())
 	}
 }
@@ -179,5 +179,28 @@ func TestSendErrorStopsThePump(t *testing.T) {
 	}, tick, &c)
 	if err == nil {
 		t.Fatal("a failing send did not stop the pump")
+	}
+}
+
+// The report has to say whether audio was actually lost, which is the question the gap
+// counts cannot answer on their own.
+func TestCountersReportInsertedAndDroppedAudio(t *testing.T) {
+	small := audio.NewRing(audio.Samples(20))
+	block := make([]int16, audio.Samples(20))
+
+	small.Write(block)
+	small.Write(block) // one packet too many for the ring: 20ms dropped
+
+	drained := make([]int16, audio.Samples(40))
+	small.Read(drained) // only 20ms was there, so 20ms of silence is invented
+
+	var c Counters
+	c.record(small)
+
+	if got := c.DroppedMillis.Load(); got != 20 {
+		t.Errorf("dropped = %dms, want 20", got)
+	}
+	if got := c.InsertedMillis.Load(); got != 20 {
+		t.Errorf("inserted = %dms, want 20", got)
 	}
 }

@@ -20,8 +20,8 @@ const (
 	// ring that touches them means the clocks genuinely diverged.
 	ringDepth = 2000 * time.Millisecond
 
-	// A gap longer than three packets is no longer jitter.
-	stallThreshold = 3 * packet
+	// Three packets. Anything shorter is ordinary jitter not worth a line in the report.
+	gapThreshold = 3 * packet
 )
 
 // Phone is the far side of the bridge. It exists as an interface because every test in
@@ -33,24 +33,48 @@ type Phone interface {
 	Done() <-chan struct{}
 }
 
-// Counters are what makes the two failure shapes we measured visible. Stalls and
-// suppressed silence look identical in the audio and mean different things: a stall is
-// something going wrong, suppressed silence is a phone behaving correctly.
+// Counters are what makes the failure shapes visible. Read them in this order: the
+// inserted and dropped milliseconds say whether audio was actually lost, and the gap
+// counts say why.
+//
+// Gaps are measured between our own reads, so on wifi they count bursty delivery as
+// well as real trouble: packets arrive in clumps, we read the clump back to back and
+// then wait. Many gaps with no inserted silence means the buffer absorbed them.
 type Counters struct {
-	Stalls           atomic.Int64
-	StalledMillis    atomic.Int64
-	SilencePauses    atomic.Int64
-	SilentMillis     atomic.Int64
 	PacketsToPhone   atomic.Int64
 	PacketsFromPhone atomic.Int64
+
+	Gaps          atomic.Int64 // gaps with no marker bit: packets late or lost
+	GapMillis     atomic.Int64
+	SilencePauses atomic.Int64 // gaps the phone marked as deliberate silence
+	SilentMillis  atomic.Int64
+
+	// Filled in from the two rings when the call ends.
+	InsertedMillis atomic.Int64 // silence handed to a device because nothing was buffered
+	DroppedMillis  atomic.Int64 // audio thrown away because nobody drained it
 }
 
 func (c *Counters) String() string {
-	return fmt.Sprintf("to phone %d packets, from phone %d packets, %d stalls totalling %dms, %d silence pauses totalling %dms",
+	return fmt.Sprintf("to phone %d packets, from phone %d packets, inserted %dms of silence, dropped %dms, %d gaps totalling %dms, %d silence pauses totalling %dms",
 		c.PacketsToPhone.Load(), c.PacketsFromPhone.Load(),
-		c.Stalls.Load(), c.StalledMillis.Load(),
+		c.InsertedMillis.Load(), c.DroppedMillis.Load(),
+		c.Gaps.Load(), c.GapMillis.Load(),
 		c.SilencePauses.Load(), c.SilentMillis.Load())
 }
+
+// record folds both rings' totals into the counters. Called once, as the call ends.
+func (c *Counters) record(rings ...*audio.Ring) {
+	var over, under int64
+	for _, r := range rings {
+		o, u := r.Stats()
+		over += o
+		under += u
+	}
+	c.DroppedMillis.Store(millis(over))
+	c.InsertedMillis.Store(millis(under))
+}
+
+func millis(samples int64) int64 { return samples * 1000 / audio.SampleRate }
 
 // Run bridges call to the two named host devices and returns when the call ends, a
 // device disappears, or ctx is cancelled.
@@ -60,6 +84,7 @@ func (c *Counters) String() string {
 func Run(ctx context.Context, host *audio.Host, call Phone, captureName, playbackName string, c *Counters) error {
 	toPhone := audio.NewRing(depth())
 	fromPhone := audio.NewRing(depth())
+	defer c.record(toPhone, fromPhone)
 
 	capture, err := host.Capture(captureName, toPhone)
 	if err != nil {
@@ -146,14 +171,14 @@ func pumpFromPhone(ctx context.Context, recv func() ([]int16, bool, error), r *a
 		c.PacketsFromPhone.Add(1)
 
 		arrived := now()
-		if gap := arrived.Sub(last); !last.IsZero() && gap > stallThreshold {
-			millis := gap.Milliseconds()
+		if gap := arrived.Sub(last); !last.IsZero() && gap > gapThreshold {
+			gapMillis := gap.Milliseconds()
 			if marker {
 				c.SilencePauses.Add(1)
-				c.SilentMillis.Add(millis)
+				c.SilentMillis.Add(gapMillis)
 			} else {
-				c.Stalls.Add(1)
-				c.StalledMillis.Add(millis)
+				c.Gaps.Add(1)
+				c.GapMillis.Add(gapMillis)
 			}
 		}
 		last = arrived
