@@ -84,7 +84,10 @@ func run(listDevices bool, account sipsrv.Account, bind string, port int, captur
 	log.Printf("answered, codec %s, bridging %q to %q", call.Codec, capture, playback)
 
 	var counters bridge.Counters
-	err = bridge.Run(ctx, host, call, capture, playback, &counters)
+	err = bridge.Run(ctx, call,
+		func(r *audio.Ring) (bridge.Device, error) { return host.Capture(capture, r) },
+		func(r *audio.Ring) (bridge.Device, error) { return host.Playback(playback, r) },
+		&counters)
 	log.Printf("call ended: %s", counters.String())
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err

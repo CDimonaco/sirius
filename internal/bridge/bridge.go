@@ -24,6 +24,19 @@ const (
 	gapThreshold = 3 * packet
 )
 
+// Device is what the bridge needs from a host audio device.
+type Device interface {
+	Name() string
+	// Lost closes when the device stops on its own, which is what happens when the
+	// audio daemon restarts or a driver is removed.
+	Lost() <-chan struct{}
+	Close() error
+}
+
+// Open hands the bridge a device wired to a ring. The caller decides which device, so
+// the bridge never has to know how they are named or found.
+type Open func(*audio.Ring) (Device, error)
+
 // Phone is the far side of the bridge. It exists as an interface because every test in
 // this package has to run without a phone, a network or a meeting.
 type Phone interface {
@@ -76,23 +89,25 @@ func (c *Counters) record(rings ...*audio.Ring) {
 
 func millis(samples int64) int64 { return samples * 1000 / audio.SampleRate }
 
-// Run bridges call to the two named host devices and returns when the call ends, a
-// device disappears, or ctx is cancelled.
+// Run bridges call to a pair of host devices and returns when the call ends, a device
+// disappears, or ctx is cancelled. Both devices are closed on the way out, whatever
+// ended the call.
 //
-// capture is the device a meeting client plays into, so its audio goes to the phone.
-// playback is the device a meeting client records from, so the phone's audio goes there.
-func Run(ctx context.Context, host *audio.Host, call Phone, captureName, playbackName string, c *Counters) error {
+// openCapture opens the device a meeting client plays into, so its audio goes to the
+// phone. openPlayback opens the device a meeting client records from, so the phone's
+// audio arrives there.
+func Run(ctx context.Context, call Phone, openCapture, openPlayback Open, c *Counters) error {
 	toPhone := audio.NewRing(depth())
 	fromPhone := audio.NewRing(depth())
 	defer c.record(toPhone, fromPhone)
 
-	capture, err := host.Capture(captureName, toPhone)
+	capture, err := openCapture(toPhone)
 	if err != nil {
 		return err
 	}
 	defer capture.Close()
 
-	playback, err := host.Playback(playbackName, fromPhone)
+	playback, err := openPlayback(fromPhone)
 	if err != nil {
 		return err
 	}

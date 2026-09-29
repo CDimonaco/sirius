@@ -1,7 +1,7 @@
 ## 1. Host audio
 
 - [x] 1.1 `internal/audio.Host` opens a capture or playback device by name substring at 8000 Hz mono int16, and reports a device as lost. No interface: there is one implementation, and the seam the tests need turned out to be `bridge.Phone`, not the device.
-- [x] 1.2 Skipped the in-memory device fake. The ring is testable on its own and the pumps take plain functions, so no test needs a fake device.
+- [x] 1.2 The fake device exists, in `internal/bridge/run_test.go`, and it is a device the bridge can use rather than one `internal/audio` has to provide. I first skipped it and was wrong: teardown and device loss cannot be tested without something that can be made to disappear. `bridge.Run` now takes two open functions instead of the host, so the fake needs no adapter.
 - [x] 1.3 One malgo implementation for both platforms rather than `_darwin.go` and `_linux.go`. miniaudio already covers CoreAudio, ALSA and PulseAudio, so a split would be two copies of the same file. Split it when default-device switching arrives, which is genuinely per-platform.
 - [x] 1.4 `Host.find` reports the requested name in the error.
 
@@ -45,8 +45,8 @@
 - [x] 7.1 `bridge.Run` opens both devices, runs the two pumps, and closes the devices on the way out whatever ended the call.
 - [x] 7.2 A lost device wins the select and returns an error naming it. The deferred closes take care of the other one.
 - [x] 7.3 Tested at the PCM boundary with a scripted phone: audio reaches the ring, and the ticker paces one packet per tick, padding with silence when nothing is buffered.
-- [ ] 7.4 Teardown is covered by defers rather than by a test. A test would need the fake device from task 1.2, which nothing else needs.
-- [ ] 7.5 Same: the select branch is two lines and needs a device that can be made to disappear.
+- [x] 7.4 Tested: a hangup and a cancelled context both return and close both devices, a failure to open the second device still closes the first, and two calls in a row behave the same.
+- [x] 7.5 Tested for both devices: the error names the one that disappeared and the other is closed.
 
 ## 8. Wiring and closing the loop
 
