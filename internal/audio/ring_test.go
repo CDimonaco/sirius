@@ -20,7 +20,7 @@ func TestRingRoundTrip(t *testing.T) {
 
 func TestRingWrapsAround(t *testing.T) {
 	r := NewRing(4)
-	for round := 0; round < 5; round++ {
+	for round := range 5 {
 		r.Write([]int16{1, 2, 3})
 		got := make([]int16, 3)
 		r.Read(got)

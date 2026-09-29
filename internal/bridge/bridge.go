@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"sync/atomic"
 	"time"
 
-	"github.com/cdimonaco/sirius/internal/audio"
+	"github.com/CDimonaco/sirius/internal/audio"
 )
 
 const (
@@ -179,8 +181,13 @@ func pumpFromPhone(ctx context.Context, recv func() ([]int16, bool, error), r *a
 	for ctx.Err() == nil {
 		pcm, marker, err := recv()
 		if err != nil {
-			// The phone hanging up ends the read, which is not a failure.
-			return nil
+			// A call that ended is a clean stop. Anything else, a decode failure or a
+			// dead socket, has to be reported: otherwise a broken media path is
+			// indistinguishable from the user hanging up.
+			if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled) {
+				return nil
+			}
+			return fmt.Errorf("receive from phone: %w", err)
 		}
 		r.Write(pcm)
 		c.PacketsFromPhone.Add(1)

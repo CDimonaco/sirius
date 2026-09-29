@@ -3,12 +3,13 @@ package bridge
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cdimonaco/sirius/internal/audio"
+	"github.com/CDimonaco/sirius/internal/audio"
 )
 
 // fakeDevice is a host device that can be made to disappear and remembers being closed.
@@ -37,7 +38,7 @@ func newFakePhone() *fakePhone { return &fakePhone{done: make(chan struct{})} }
 
 func (p *fakePhone) ReadSamples() ([]int16, bool, error) {
 	<-p.done
-	return nil, false, errors.New("call ended")
+	return nil, false, io.EOF // a real call ends the read with EOF
 }
 func (p *fakePhone) WriteSamples([]int16) error { return nil }
 func (p *fakePhone) Done() <-chan struct{}      { return p.done }
@@ -45,7 +46,7 @@ func (p *fakePhone) hangup()                    { close(p.done) }
 
 // run starts Run and returns a channel carrying its verdict, so each test can trigger
 // one ending and wait for it without a sleep.
-func run(t *testing.T, ctx context.Context, phone *fakePhone, capture, playback *fakeDevice) <-chan error {
+func run(ctx context.Context, t *testing.T, phone *fakePhone, capture, playback *fakeDevice) <-chan error {
 	t.Helper()
 	done := make(chan error, 1)
 	go func() { done <- Run(ctx, phone, capture.open, playback.open, &Counters{}) }()
@@ -76,7 +77,7 @@ func TestPhoneHangupEndsTheBridgeCleanly(t *testing.T) {
 	capture, playback := newFakeDevice("capture"), newFakeDevice("playback")
 	phone := newFakePhone()
 
-	done := run(t, context.Background(), phone, capture, playback)
+	done := run(context.Background(), t, phone, capture, playback)
 	phone.hangup()
 
 	if err := waitFor(t, done); err != nil {
@@ -89,7 +90,7 @@ func TestCancellingTheContextEndsTheBridge(t *testing.T) {
 	capture, playback := newFakeDevice("capture"), newFakeDevice("playback")
 	ctx, cancel := context.WithCancel(context.Background())
 
-	done := run(t, ctx, newFakePhone(), capture, playback)
+	done := run(ctx, t, newFakePhone(), capture, playback)
 	cancel()
 
 	if err := waitFor(t, done); !errors.Is(err, context.Canceled) {
@@ -101,7 +102,7 @@ func TestCancellingTheContextEndsTheBridge(t *testing.T) {
 func TestLosingTheCaptureDeviceEndsTheCall(t *testing.T) {
 	capture, playback := newFakeDevice("BlackHole 2ch"), newFakeDevice("BlackHole 16ch")
 
-	done := run(t, context.Background(), newFakePhone(), capture, playback)
+	done := run(context.Background(), t, newFakePhone(), capture, playback)
 	capture.disappear()
 
 	err := waitFor(t, done)
@@ -114,7 +115,7 @@ func TestLosingTheCaptureDeviceEndsTheCall(t *testing.T) {
 func TestLosingThePlaybackDeviceEndsTheCall(t *testing.T) {
 	capture, playback := newFakeDevice("BlackHole 2ch"), newFakeDevice("BlackHole 16ch")
 
-	done := run(t, context.Background(), newFakePhone(), capture, playback)
+	done := run(context.Background(), t, newFakePhone(), capture, playback)
 	playback.disappear()
 
 	err := waitFor(t, done)
@@ -142,7 +143,7 @@ func TestASecondCallWorksAfterTheFirst(t *testing.T) {
 		capture, playback := newFakeDevice("capture"), newFakeDevice("playback")
 		phone := newFakePhone()
 
-		done := run(t, context.Background(), phone, capture, playback)
+		done := run(context.Background(), t, phone, capture, playback)
 		phone.hangup()
 
 		if err := waitFor(t, done); err != nil {

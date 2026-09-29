@@ -14,7 +14,7 @@ import (
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
 
-	"github.com/cdimonaco/sirius/internal/audio"
+	"github.com/CDimonaco/sirius/internal/audio"
 )
 
 // RingTimeout is how long Sirius lets the phone ring before giving up.

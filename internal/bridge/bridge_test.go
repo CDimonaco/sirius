@@ -3,10 +3,12 @@ package bridge
 import (
 	"context"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/cdimonaco/sirius/internal/audio"
+	"github.com/CDimonaco/sirius/internal/audio"
 )
 
 // fakeClock is hand-wound, so gap classification needs no wall time.
@@ -27,7 +29,7 @@ func replay(clock *fakeClock, arrivals []arrival) func() ([]int16, bool, error) 
 	i := 0
 	return func() ([]int16, bool, error) {
 		if i >= len(arrivals) {
-			return nil, false, errors.New("hung up")
+			return nil, false, io.EOF // the call ended
 		}
 		a := arrivals[i]
 		i++
@@ -202,5 +204,27 @@ func TestCountersReportInsertedAndDroppedAudio(t *testing.T) {
 	}
 	if got := c.InsertedMillis.Load(); got != 20 {
 		t.Errorf("inserted = %dms, want 20", got)
+	}
+}
+
+// A read that fails for any reason other than the call ending must be reported, not
+// dressed up as a hangup.
+func TestReceiveFailureIsReported(t *testing.T) {
+	broken := func() ([]int16, bool, error) { return nil, false, errors.New("decode failed") }
+
+	err := pumpFromPhone(context.Background(), broken, audio.NewRing(depth()), time.Now, &Counters{})
+	if err == nil {
+		t.Fatal("a decode failure was reported as a clean end")
+	}
+	if !strings.Contains(err.Error(), "decode failed") {
+		t.Fatalf("got %v, want it to name the cause", err)
+	}
+}
+
+func TestEndOfCallIsNotAFailure(t *testing.T) {
+	ended := func() ([]int16, bool, error) { return nil, false, io.EOF }
+
+	if err := pumpFromPhone(context.Background(), ended, audio.NewRing(depth()), time.Now, &Counters{}); err != nil {
+		t.Fatalf("EOF reported as %v, want nil", err)
 	}
 }

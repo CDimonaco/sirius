@@ -16,9 +16,9 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/cdimonaco/sirius/internal/audio"
-	"github.com/cdimonaco/sirius/internal/bridge"
-	"github.com/cdimonaco/sirius/internal/sipsrv"
+	"github.com/CDimonaco/sirius/internal/audio"
+	"github.com/CDimonaco/sirius/internal/bridge"
+	"github.com/CDimonaco/sirius/internal/sipsrv"
 )
 
 func main() {

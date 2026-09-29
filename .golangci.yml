@@ -1,0 +1,18 @@
+version: "2"
+
+# The default set stays on: errcheck, govet, ineffassign, staticcheck, unused. Added
+# below are the ones that catch a bug class this codebase can actually have. Style
+# linters are deliberately absent: on a project this size they cost more triage than
+# they return, and `testpackage` in particular would force exporting internals that
+# exist only to be tested.
+linters:
+  enable:
+    # Found a real one: pumpFromPhone was reporting a decode failure as a clean hangup.
+    - nilerr
+    # Errors are wrapped with %w throughout, so comparisons must use errors.Is.
+    - errorlint
+    # Contexts thread through both audio pumps and every blocking call.
+    - contextcheck
+    - intrange
+    - copyloopvar
+    - usetesting

@@ -1,4 +1,4 @@
-module github.com/cdimonaco/sirius
+module github.com/CDimonaco/sirius
 
 go 1.27.1
 

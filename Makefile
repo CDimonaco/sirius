@@ -26,8 +26,8 @@ fmt-check:
 tidy:
 	go mod tidy
 
-tidy-check: tidy
-	@git diff --exit-code go.mod go.sum
+tidy-check:
+	go mod tidy -diff
 
 clean:
 	rm -rf $(BIN_DIR)
