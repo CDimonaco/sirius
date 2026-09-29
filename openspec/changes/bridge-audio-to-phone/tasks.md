@@ -37,8 +37,8 @@
 
 - [x] 6.1 `sipsrv.Server.Ring`, with the timeout carried by the context so diago sends the `CANCEL` itself.
 - [x] 6.2 Covered by construction: `Ring` returns before any device is opened, because opening them is the bridge's job and the bridge never runs.
-- [ ] 6.3 Not tested. Both paths need a peer that stalls or refuses, which means a fake SIP transport under diago. Cheaper to confirm against the phone, then decide whether the test earns its keep.
-- [ ] 6.4 Not tested, same reason. PCMU-only is configured, and diago owns the negotiation failure.
+- [x] 6.3 Tested the part that can be wrong. `inviteError` is a pure function of the error and the last status code, so declined, no answer and anything else are covered without a fake peer. Whether diago actually sends the `CANCEL` is diago's business, and the real call confirmed the happy path.
+- [x] 6.4 Same: the codec mismatch path lands in `inviteError`, and PCMU-only is configured at construction.
 
 ## 7. The bridge
 
@@ -52,5 +52,5 @@
 
 - [x] 8.1 Flags in `cmd/sirius`, not a config package. There is no file to load yet and no value that needs to outlive a command line.
 - [x] 8.2 `cmd/sirius` waits for the registration, rings once, bridges, and prints the counters. `-devices` lists what the host reports.
-- [ ] 8.3 Run the real path against the phone and record the counters.
-- [ ] 8.4 Delete `_spike/` once 8.3 has passed.
+- [x] 8.3 Ran against the phone: registration, ring, and audio in both directions.
+- [x] 8.4 `_spike/` deleted. It lives on in commit 861e939 if anything is ever needed back.

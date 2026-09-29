@@ -91,14 +91,7 @@ func (s *Server) Ring(ctx context.Context, callerID string) (*Call, error) {
 		},
 	})
 	if err != nil {
-		switch {
-		case lastStatus >= 400:
-			return nil, fmt.Errorf("phone declined with %d: %w", lastStatus, err)
-		case errors.Is(err, context.DeadlineExceeded):
-			return nil, fmt.Errorf("phone did not answer within %s: %w", RingTimeout, err)
-		default:
-			return nil, fmt.Errorf("invite: %w", err)
-		}
+		return nil, inviteError(err, lastStatus)
 	}
 
 	props := diago.MediaProps{}
@@ -202,4 +195,18 @@ func samplesToBytes(s []int16) []byte {
 		return nil
 	}
 	return unsafe.Slice((*byte)(unsafe.Pointer(&s[0])), len(s)*2)
+}
+
+// inviteError says why the phone is not on the line. The three cases look the same to
+// diago and mean different things to a person: the phone refused, nobody picked up, or
+// the call never got that far.
+func inviteError(err error, lastStatus int) error {
+	switch {
+	case lastStatus >= 400:
+		return fmt.Errorf("phone declined with %d: %w", lastStatus, err)
+	case errors.Is(err, context.DeadlineExceeded):
+		return fmt.Errorf("phone did not answer within %s: %w", RingTimeout, err)
+	default:
+		return fmt.Errorf("invite: %w", err)
+	}
 }
