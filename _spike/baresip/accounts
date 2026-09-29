@@ -1,0 +1,2 @@
+# Answers anything that rings it, PCMU only.
+<sip:bridge@127.0.0.1:5080>;answermode=auto;audio_codecs=PCMU/8000/1;regint=0

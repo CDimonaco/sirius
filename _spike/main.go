@@ -161,14 +161,19 @@ func run(ctx context.Context, mctx malgo.Context, o opts) error {
 		}),
 	)
 
-	from := &sip.FromHeader{
-		DisplayName: o.callerID,
-		Address:     sip.Uri{User: "sirius", Host: "127.0.0.1", Port: o.bindPort},
+	// Passing a From header here is the open question: sipgo builds its own, so a
+	// second one may make the request invalid rather than setting caller ID.
+	headers := []sip.Header{}
+	if o.callerID != "" {
+		headers = append(headers, &sip.FromHeader{
+			DisplayName: o.callerID,
+			Address:     sip.Uri{User: "sirius", Host: "127.0.0.1", Port: o.bindPort},
+		})
 	}
 	log.Printf("ringing %s with caller id %q", uri.String(), o.callerID)
 
 	dialog, med, err := dg.Invite(ctx, uri, diago.InviteOptions{
-		Headers: []sip.Header{from},
+		Headers: headers,
 	})
 	if err != nil {
 		return fmt.Errorf("invite: %w", err)
