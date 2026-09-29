@@ -1,10 +1,10 @@
-# Sirius
+![Sirius](docs/assets/banner.svg)
 
 [![ci](https://github.com/CDimonaco/sirius/actions/workflows/ci.yml/badge.svg)](https://github.com/CDimonaco/sirius/actions/workflows/ci.yml)
 
-Answer your meetings on a desk phone. Sirius takes the audio of whatever is running
-on your computer, Google Meet in a browser, Zoom, a Slack huddle, and bridges it to
-a VoIP handset or to an analog phone behind an ATA.
+Sirius takes the audio of whatever is running on your computer, Google Meet in a
+browser, Zoom, a Slack huddle, and bridges it to a VoIP handset or to an analog phone
+behind an ATA.
 
 It installs nothing into Slack, Meet or Zoom. No API token, no bot, no admin
 approval. Sirius runs as a small SIP registrar on your own machine, and the meeting
@@ -125,3 +125,10 @@ make lint
 No test needs an audio device, a phone or a meeting.
 
 macOS is the first target, Linux the second.
+
+## The name
+
+The Sirio was the desk phone Telecom Italia put in Italian homes in the nineties, and
+the Sirio View added a small LCD to it. The logo is that phone, stylised: the wedge
+that sloped up towards the back, the handset in its recess, the coiled cord, and the
+blue halo it was always photographed against.
