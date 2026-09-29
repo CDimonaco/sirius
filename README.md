@@ -1,5 +1,7 @@
 # Sirius
 
+[![ci](https://github.com/CDimonaco/sirius/actions/workflows/ci.yml/badge.svg)](https://github.com/CDimonaco/sirius/actions/workflows/ci.yml)
+
 Answer your meetings on a desk phone. Sirius takes the audio of whatever is running
 on your computer, Google Meet in a browser, Zoom, a Slack huddle, and bridges it to
 a VoIP handset or to an analog phone behind an ATA.

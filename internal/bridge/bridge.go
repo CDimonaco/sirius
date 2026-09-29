@@ -105,13 +105,13 @@ func Run(ctx context.Context, call Phone, openCapture, openPlayback Open, c *Cou
 	if err != nil {
 		return err
 	}
-	defer capture.Close()
+	defer func() { _ = capture.Close() }()
 
 	playback, err := openPlayback(fromPhone)
 	if err != nil {
 		return err
 	}
-	defer playback.Close()
+	defer func() { _ = playback.Close() }()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

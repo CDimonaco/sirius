@@ -171,9 +171,11 @@ func (c *Call) Hangup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	// The BYE is the part worth reporting. Closing the media session and the dialog
+	// cannot fail in a way the caller could act on.
 	err := c.dialog.Hangup(ctx)
-	c.med.Close()
-	c.dialog.Close()
+	_ = c.med.Close()
+	_ = c.dialog.Close()
 	if err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}

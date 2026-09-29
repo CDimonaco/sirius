@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push supersedes whatever was still running for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # macOS is the first target and Linux the second, so both have to stay building.
+    # No audio device is involved: nothing in the suite opens one.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: make fmt-check
+
+      - name: go.mod is tidy
+        run: make tidy-check
+
+      - name: build
+        run: make build
+
+      - name: test
+        run: make test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The linter version lives in .tool-versions, so local runs and CI cannot drift.
+      - id: tools
+        run: echo "golangci=$(awk '/^golangci-lint /{print $2}' .tool-versions)" >> "$GITHUB_OUTPUT"
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v${{ steps.tools.outputs.golangci }}

@@ -49,7 +49,11 @@ func run(listDevices bool, account sipsrv.Account, bind string, port int, captur
 	if err != nil {
 		return err
 	}
-	defer host.Close()
+	defer func() {
+		if err := host.Close(); err != nil {
+			log.Printf("closing audio: %v", err)
+		}
+	}()
 
 	if listDevices {
 		return printDevices(host)
@@ -80,7 +84,11 @@ func run(listDevices bool, account sipsrv.Account, bind string, port int, captur
 	if err != nil {
 		return err
 	}
-	defer call.Hangup()
+	defer func() {
+		if err := call.Hangup(); err != nil {
+			log.Printf("hanging up: %v", err)
+		}
+	}()
 	log.Printf("answered, codec %s, bridging %q to %q", call.Codec, capture, playback)
 
 	var counters bridge.Counters
