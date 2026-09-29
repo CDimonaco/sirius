@@ -3,9 +3,10 @@
 ### Requirement: Sirius accepts an authenticated registration from a phone
 
 Sirius SHALL answer SIP `REGISTER` requests and record where the registering phone can
-be reached. A request whose credentials do not match the configured account SHALL be
-challenged once and then refused, so that another device on the same network cannot
-receive the user's meeting audio.
+be reached. A request without credentials, or with credentials that do not match the
+configured account, SHALL be answered with `401 Unauthorized` and SHALL NOT record a
+contact, so that another device on the same network cannot receive the user's meeting
+audio.
 
 #### Scenario: A phone registers with valid credentials
 
@@ -24,7 +25,8 @@ receive the user's meeting audio.
 
 - **WHEN** a `REGISTER` request arrives whose digest response does not match the
   configured account
-- **THEN** Sirius answers `403 Forbidden`
+- **THEN** Sirius answers `401 Unauthorized`, which RFC 3261 prefers over `403` because
+  the phone may simply have the wrong password and can retry
 - **AND** no contact address is recorded
 
 #### Scenario: A registration carries no contact

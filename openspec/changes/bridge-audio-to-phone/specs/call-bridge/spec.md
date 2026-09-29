@@ -102,6 +102,12 @@ because the far end is silent. Neither SHALL be treated as a failure.
 - **WHEN** the buffer has settled
 - **THEN** the buffer holds no more than 60 milliseconds of audio
 
+#### Scenario: Jitter inside one packet time is not reported
+
+- **GIVEN** an answered call
+- **WHEN** a packet arrives 50 milliseconds after the one before it
+- **THEN** no stall and no silence pause is counted
+
 ### Requirement: A call ends cleanly from either side
 
 Sirius SHALL release the host devices and the media session whenever a call ends, by
