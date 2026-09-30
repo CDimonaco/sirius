@@ -47,14 +47,19 @@ func TestRingDropsWhenFull(t *testing.T) {
 	}
 }
 
-func TestRingPadsWhenEmpty(t *testing.T) {
+// A short read is always filled to the end, because an audio callback has to hand the
+// device a full block. What is missing is counted and covered, never left as a gap.
+func TestRingFillsShortReadsAndCountsThem(t *testing.T) {
 	r := NewRing(4)
 	r.Write([]int16{7})
 
 	got := make([]int16, 3)
 	r.Read(got)
-	if got[0] != 7 || got[1] != 0 || got[2] != 0 {
-		t.Fatalf("got %v, want [7 0 0]", got)
+	if got[0] != 7 {
+		t.Fatalf("got %v, want the buffered sample first", got)
+	}
+	if got[1] == 0 && got[2] == 0 {
+		t.Fatalf("got %v, want the missing samples concealed rather than silent", got)
 	}
 	if _, under := r.Stats(); under != 2 {
 		t.Fatalf("underrun = %d, want 2", under)
@@ -114,8 +119,8 @@ func TestPrimedRingRefillsAfterRunningDry(t *testing.T) {
 
 	r.Write(fill(Samples(10), 9))
 	r.Read(out)
-	if out[0] != 0 {
-		t.Fatalf("served %d while refilling, want silence", out[0])
+	if out[0] == 9 {
+		t.Fatal("served fresh audio while still refilling")
 	}
 	r.Write(fill(Samples(10), 9))
 	r.Read(out)
@@ -125,6 +130,44 @@ func TestPrimedRingRefillsAfterRunningDry(t *testing.T) {
 }
 
 // Silence handed out while filling is as audible as any other, so it has to be counted.
+// A hole is covered with a fading repeat of what came before, because digital silence
+// arrives as a click.
+func TestHolesAreConcealedWithFadingAudio(t *testing.T) {
+	r := NewRing(Samples(100))
+	out := make([]int16, Samples(10))
+
+	r.Write(fill(Samples(10), 1000))
+	r.Read(out) // real audio, remembered
+
+	r.Read(out) // nothing buffered: concealed
+	if out[0] != 1000 {
+		t.Fatalf("first concealed sample = %d, want the repeat to start at full level", out[0])
+	}
+	if out[len(out)-1] >= 1000 {
+		t.Fatalf("concealment did not fade: last sample = %d", out[len(out)-1])
+	}
+
+	// Past the fade length it has to be silent rather than buzzing on forever.
+	for range 8 {
+		r.Read(out)
+	}
+	if out[0] != 0 {
+		t.Fatalf("still repeating after the fade: %d", out[0])
+	}
+
+	// Real audio resumes untouched, and the fade starts over from the next hole
+	// rather than carrying on from where it had already faded out.
+	r.Write(fill(Samples(10), 500))
+	r.Read(out)
+	if out[0] != 500 {
+		t.Fatalf("resumed at %d, want 500", out[0])
+	}
+	r.Read(out)
+	if out[0] == 0 {
+		t.Fatal("concealment after recovery was silent, want the fade to have reset")
+	}
+}
+
 func TestPrimingSilenceIsCountedAsUnderrun(t *testing.T) {
 	r := NewPrimedRing(Samples(100), Samples(20))
 	out := make([]int16, Samples(10))

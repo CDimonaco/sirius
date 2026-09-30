@@ -16,6 +16,14 @@ const (
 // Samples returns how many samples cover d milliseconds.
 func Samples(milliseconds int) int { return SampleRate * milliseconds / 1000 }
 
+// Concealment covers a hole with the audio either side of it rather than with digital
+// silence. A lost packet is gone whatever we do, but silence arrives as a click while a
+// fading repeat of what came before mostly passes unnoticed.
+var (
+	concealHistory = Samples(20) // how much of the recent past gets repeated
+	concealFade    = Samples(60) // how long the repeat takes to fall to silence
+)
+
 // Ring is the buffer between a real-time audio callback and an ordinary goroutine.
 //
 // The callback cannot block, so when the two sides fall out of step the Ring drops or
@@ -38,19 +46,25 @@ type Ring struct {
 	prime   int
 	filling bool
 
+	history    []int16 // the last audio actually served, repeated to cover a hole
+	historyLen int     // how much of history is real audio rather than the initial zeros
+	concealed  int     // samples concealed since real audio last flowed
+
 	overrun  atomic.Int64 // samples dropped because the reader fell behind
 	underrun atomic.Int64 // samples of silence invented because the writer fell behind
 }
 
 // NewRing returns a ring of the given capacity that serves whatever it holds.
 func NewRing(samples int) *Ring {
-	return &Ring{buf: make([]int16, samples)}
+	return &Ring{buf: make([]int16, samples), history: make([]int16, concealHistory)}
 }
 
 // NewPrimedRing returns a ring that holds back until prime samples have piled up, and
 // does so again every time it runs dry.
 func NewPrimedRing(samples, prime int) *Ring {
-	return &Ring{buf: make([]int16, samples), prime: prime, filling: prime > 0}
+	r := NewRing(samples)
+	r.prime, r.filling = prime, prime > 0
+	return r
 }
 
 // Write copies p into the ring, dropping whatever does not fit.
@@ -77,12 +91,10 @@ func (r *Ring) Read(p []int16) {
 
 	if r.filling {
 		if r.length < r.prime {
-			// Still filling. The silence handed out here is as audible as any other,
-			// so it is counted the same way rather than hidden.
+			// Still filling. What goes out here is as much a hole as any other, so it
+			// is concealed and counted the same way rather than hidden.
 			r.underrun.Add(int64(len(p)))
-			for i := range p {
-				p[i] = 0
-			}
+			r.conceal(p)
 			return
 		}
 		r.filling = false
@@ -94,14 +106,49 @@ func (r *Ring) Read(p []int16) {
 		r.start = (r.start + 1) % len(r.buf)
 		r.length--
 	}
+	if n > 0 {
+		r.remember(p[:n])
+	}
 	if n == len(p) {
+		r.concealed = 0
 		return
 	}
 	r.underrun.Add(int64(len(p) - n))
-	for i := n; i < len(p); i++ {
-		p[i] = 0
-	}
+	r.conceal(p[n:])
 	r.filling = r.prime > 0
+}
+
+// conceal fills p by repeating recent audio, fading to silence so that a long gap goes
+// quiet instead of buzzing. With nothing to repeat yet it writes silence.
+func (r *Ring) conceal(p []int16) {
+	if r.historyLen == 0 {
+		for i := range p {
+			p[i] = 0
+		}
+		r.concealed += len(p)
+		return
+	}
+	recent := r.history[len(r.history)-r.historyLen:]
+	for i := range p {
+		gain := 1 - float32(r.concealed)/float32(concealFade)
+		if gain <= 0 {
+			p[i] = 0
+		} else {
+			p[i] = int16(float32(recent[r.concealed%len(recent)]) * gain)
+		}
+		r.concealed++
+	}
+}
+
+// remember keeps the tail of what was just served, which is what conceal repeats.
+func (r *Ring) remember(p []int16) {
+	r.historyLen = min(len(r.history), r.historyLen+len(p))
+	if len(p) >= len(r.history) {
+		copy(r.history, p[len(p)-len(r.history):])
+		return
+	}
+	copy(r.history, r.history[len(p):])
+	copy(r.history[len(r.history)-len(p):], p)
 }
 
 // Len reports how much audio is waiting, in samples.

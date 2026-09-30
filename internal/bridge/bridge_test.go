@@ -161,9 +161,10 @@ func TestSentAudioIsPacedByTheTicker(t *testing.T) {
 	if sent[0][0] != 3 || sent[1][0] != 3 {
 		t.Fatalf("buffered audio did not reach the phone: %d, %d", sent[0][0], sent[1][0])
 	}
-	// The third tick had nothing buffered, so it must carry silence rather than wait.
-	if sent[2][0] != 0 {
-		t.Fatalf("third packet = %d, want silence", sent[2][0])
+	// The third tick had nothing buffered. It must still go out on time, carrying
+	// concealed audio rather than waiting for the capture device to catch up.
+	if sent[2][0] == 0 {
+		t.Fatal("third packet was digital silence, want the hole concealed")
 	}
 	if _, under := r.Stats(); under != int64(audio.Samples(20)) {
 		t.Fatalf("underrun = %d, want one packet worth", under)
@@ -202,8 +203,8 @@ func TestCountersReportInsertedAndDroppedAudio(t *testing.T) {
 	if got := c.DroppedMillis.Load(); got != 20 {
 		t.Errorf("dropped = %dms, want 20", got)
 	}
-	if got := c.InsertedMillis.Load(); got != 20 {
-		t.Errorf("inserted = %dms, want 20", got)
+	if got := c.ConcealedMillis.Load(); got != 20 {
+		t.Errorf("concealed = %dms, want 20", got)
 	}
 }
 

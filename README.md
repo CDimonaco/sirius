@@ -83,14 +83,19 @@ pinned device and will ignore the change otherwise.
 Hang up from the phone, or press Ctrl-C. Sirius prints what it counted:
 
 ```
-call ended: to phone 3115 packets, from phone 2971 packets, inserted 0ms of silence,
-dropped 0ms, 235 gaps totalling 25759ms, 0 silence pauses totalling 0ms
+call ended: to phone 2074 packets, from phone 2031 packets, concealed 860ms,
+dropped 0ms, 136 gaps totalling 14868ms, 0 silence pauses totalling 0ms
 ```
 
-Read the inserted and dropped milliseconds first, because they say whether audio was
-actually lost. The gap count is measured between Sirius' own reads, so on wifi it counts
-bursty delivery as well as real trouble: many gaps with nothing inserted means the buffer
+Read the concealed and dropped milliseconds first, because they say how much audio went
+missing. The gap count is measured between Sirius' own reads, so on wifi it counts bursty
+delivery as well as real trouble: many gaps with little concealed means the buffer
 absorbed them.
+
+Compare concealed against the packets that never arrived, which is the difference between
+the two packet counts times 20 milliseconds. When the two are equal, every hole was a lost
+packet and a deeper `-prebuffer` will not help. When concealed is the larger of the two,
+the excess came from packets that arrived too late, and more prebuffer will remove it.
 
 ### Options
 

@@ -49,12 +49,12 @@ type Phone interface {
 }
 
 // Counters are what makes the failure shapes visible. Read them in this order: the
-// inserted and dropped milliseconds say whether audio was actually lost, and the gap
+// concealed and dropped milliseconds say how much audio went missing, and the gap
 // counts say why.
 //
 // Gaps are measured between our own reads, so on wifi they count bursty delivery as
 // well as real trouble: packets arrive in clumps, we read the clump back to back and
-// then wait. Many gaps with no inserted silence means the buffer absorbed them.
+// then wait. Many gaps with nothing concealed means the buffer absorbed them.
 type Counters struct {
 	PacketsToPhone   atomic.Int64
 	PacketsFromPhone atomic.Int64
@@ -65,14 +65,14 @@ type Counters struct {
 	SilentMillis  atomic.Int64
 
 	// Filled in from the two rings when the call ends.
-	InsertedMillis atomic.Int64 // silence handed to a device because nothing was buffered
-	DroppedMillis  atomic.Int64 // audio thrown away because nobody drained it
+	ConcealedMillis atomic.Int64 // audio missing from the stream and covered over
+	DroppedMillis   atomic.Int64 // audio thrown away because nobody drained it
 }
 
 func (c *Counters) String() string {
-	return fmt.Sprintf("to phone %d packets, from phone %d packets, inserted %dms of silence, dropped %dms, %d gaps totalling %dms, %d silence pauses totalling %dms",
+	return fmt.Sprintf("to phone %d packets, from phone %d packets, concealed %dms, dropped %dms, %d gaps totalling %dms, %d silence pauses totalling %dms",
 		c.PacketsToPhone.Load(), c.PacketsFromPhone.Load(),
-		c.InsertedMillis.Load(), c.DroppedMillis.Load(),
+		c.ConcealedMillis.Load(), c.DroppedMillis.Load(),
 		c.Gaps.Load(), c.GapMillis.Load(),
 		c.SilencePauses.Load(), c.SilentMillis.Load())
 }
@@ -86,7 +86,7 @@ func (c *Counters) record(rings ...*audio.Ring) {
 		under += u
 	}
 	c.DroppedMillis.Store(millis(over))
-	c.InsertedMillis.Store(millis(under))
+	c.ConcealedMillis.Store(millis(under))
 }
 
 func millis(samples int64) int64 { return samples * 1000 / audio.SampleRate }
