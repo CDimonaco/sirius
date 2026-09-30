@@ -32,16 +32,17 @@ func main() {
 		capture     = flag.String("capture", "BlackHole 2ch", "device a meeting plays into, matched by substring")
 		playback    = flag.String("playback", "BlackHole 16ch", "device a meeting records from, matched by substring")
 		callerID    = flag.String("caller-id", "Sirius", "display name the phone shows")
+		prebuffer   = flag.Duration("prebuffer", 100*time.Millisecond, "audio to pile up from the phone before playing any of it")
 	)
 	flag.Parse()
 
 	if err := run(*listDevices, sipsrv.Account{User: *account, Password: *password, Realm: *realm},
-		*bind, *port, *capture, *playback, *callerID); err != nil {
+		*bind, *port, *capture, *playback, *callerID, *prebuffer); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(listDevices bool, account sipsrv.Account, bind string, port int, capture, playback, callerID string) error {
+func run(listDevices bool, account sipsrv.Account, bind string, port int, capture, playback, callerID string, prebuffer time.Duration) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
@@ -95,7 +96,7 @@ func run(listDevices bool, account sipsrv.Account, bind string, port int, captur
 	err = bridge.Run(ctx, call,
 		func(r *audio.Ring) (bridge.Device, error) { return host.Capture(capture, r) },
 		func(r *audio.Ring) (bridge.Device, error) { return host.Playback(playback, r) },
-		&counters)
+		prebuffer, &counters)
 	log.Printf("call ended: %s", counters.String())
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return err

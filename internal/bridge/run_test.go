@@ -49,7 +49,7 @@ func (p *fakePhone) hangup()                    { close(p.done) }
 func run(ctx context.Context, t *testing.T, phone *fakePhone, capture, playback *fakeDevice) <-chan error {
 	t.Helper()
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, phone, capture.open, playback.open, &Counters{}) }()
+	go func() { done <- Run(ctx, phone, capture.open, playback.open, 0, &Counters{}) }()
 	return done
 }
 
@@ -130,7 +130,7 @@ func TestFailingToOpenPlaybackClosesCapture(t *testing.T) {
 	capture := newFakeDevice("capture")
 	failing := func(*audio.Ring) (Device, error) { return nil, errors.New("no such device") }
 
-	err := Run(context.Background(), newFakePhone(), capture.open, failing, &Counters{})
+	err := Run(context.Background(), newFakePhone(), capture.open, failing, 0, &Counters{})
 	if err == nil {
 		t.Fatal("opening a missing playback device succeeded")
 	}

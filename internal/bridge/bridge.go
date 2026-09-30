@@ -97,10 +97,11 @@ func millis(samples int64) int64 { return samples * 1000 / audio.SampleRate }
 //
 // openCapture opens the device a meeting client plays into, so its audio goes to the
 // phone. openPlayback opens the device a meeting client records from, so the phone's
-// audio arrives there.
-func Run(ctx context.Context, call Phone, openCapture, openPlayback Open, c *Counters) error {
+// audio arrives there. prebuffer is how much of the phone's audio to pile up before
+// playing any of it, which buys room to absorb a burst of late packets.
+func Run(ctx context.Context, call Phone, openCapture, openPlayback Open, prebuffer time.Duration, c *Counters) error {
 	toPhone := audio.NewRing(depth())
-	fromPhone := audio.NewRing(depth())
+	fromPhone := audio.NewPrimedRing(depth(), audio.Samples(int(prebuffer.Milliseconds())))
 	defer c.record(toPhone, fromPhone)
 
 	capture, err := openCapture(toPhone)

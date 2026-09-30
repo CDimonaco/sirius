@@ -79,3 +79,66 @@ func TestRingMatchedRatesStayClean(t *testing.T) {
 		t.Fatalf("ring holds %d samples, want 0", r.Len())
 	}
 }
+
+func TestPrimedRingHoldsBackUntilItHasEnough(t *testing.T) {
+	r := NewPrimedRing(Samples(100), Samples(20))
+	out := make([]int16, Samples(10))
+
+	// Ten milliseconds buffered is not yet the twenty it waits for.
+	r.Write(fill(Samples(10), 5))
+	r.Read(out)
+	if out[0] != 0 {
+		t.Fatalf("served %d while still filling, want silence", out[0])
+	}
+
+	// With the threshold reached it serves, and keeps serving.
+	r.Write(fill(Samples(10), 5))
+	r.Read(out)
+	if out[0] != 5 {
+		t.Fatalf("served %d after reaching the threshold, want 5", out[0])
+	}
+	r.Read(out)
+	if out[0] != 5 {
+		t.Fatalf("served %d on the second read, want 5", out[0])
+	}
+}
+
+func TestPrimedRingRefillsAfterRunningDry(t *testing.T) {
+	r := NewPrimedRing(Samples(100), Samples(20))
+	out := make([]int16, Samples(10))
+
+	r.Write(fill(Samples(20), 7))
+	r.Read(out)
+	r.Read(out) // drained
+	r.Read(out) // dry: counts an underrun and goes back to filling
+
+	r.Write(fill(Samples(10), 9))
+	r.Read(out)
+	if out[0] != 0 {
+		t.Fatalf("served %d while refilling, want silence", out[0])
+	}
+	r.Write(fill(Samples(10), 9))
+	r.Read(out)
+	if out[0] != 9 {
+		t.Fatalf("served %d once refilled, want 9", out[0])
+	}
+}
+
+// Silence handed out while filling is as audible as any other, so it has to be counted.
+func TestPrimingSilenceIsCountedAsUnderrun(t *testing.T) {
+	r := NewPrimedRing(Samples(100), Samples(20))
+	out := make([]int16, Samples(10))
+
+	r.Read(out)
+	if _, under := r.Stats(); under != int64(Samples(10)) {
+		t.Fatalf("underrun = %d, want the priming silence counted", under)
+	}
+}
+
+func fill(n int, v int16) []int16 {
+	s := make([]int16, n)
+	for i := range s {
+		s[i] = v
+	}
+	return s
+}

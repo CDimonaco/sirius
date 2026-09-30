@@ -32,12 +32,25 @@ type Ring struct {
 	start  int // index of the oldest sample
 	length int // how many samples are currently held
 
+	// prime is how much has to pile up before the ring starts serving, both at the
+	// start and again after it runs dry. It trades latency for room to absorb a
+	// burst of late packets. Zero means serve whatever is there.
+	prime   int
+	filling bool
+
 	overrun  atomic.Int64 // samples dropped because the reader fell behind
 	underrun atomic.Int64 // samples of silence invented because the writer fell behind
 }
 
+// NewRing returns a ring of the given capacity that serves whatever it holds.
 func NewRing(samples int) *Ring {
 	return &Ring{buf: make([]int16, samples)}
+}
+
+// NewPrimedRing returns a ring that holds back until prime samples have piled up, and
+// does so again every time it runs dry.
+func NewPrimedRing(samples, prime int) *Ring {
+	return &Ring{buf: make([]int16, samples), prime: prime, filling: prime > 0}
 }
 
 // Write copies p into the ring, dropping whatever does not fit.
@@ -62,6 +75,19 @@ func (r *Ring) Read(p []int16) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if r.filling {
+		if r.length < r.prime {
+			// Still filling. The silence handed out here is as audible as any other,
+			// so it is counted the same way rather than hidden.
+			r.underrun.Add(int64(len(p)))
+			for i := range p {
+				p[i] = 0
+			}
+			return
+		}
+		r.filling = false
+	}
+
 	n := 0
 	for ; n < len(p) && r.length > 0; n++ {
 		p[n] = r.buf[r.start]
@@ -75,6 +101,7 @@ func (r *Ring) Read(p []int16) {
 	for i := n; i < len(p); i++ {
 		p[i] = 0
 	}
+	r.filling = r.prime > 0
 }
 
 // Len reports how much audio is waiting, in samples.
