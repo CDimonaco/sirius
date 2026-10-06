@@ -32,7 +32,8 @@ func main() {
 		capture     = flag.String("capture", "BlackHole 2ch", "device a meeting plays into, matched by substring")
 		playback    = flag.String("playback", "BlackHole 16ch", "device a meeting records from, matched by substring")
 		callerID    = flag.String("caller-id", "Sirius", "display name the phone shows")
-		prebuffer   = flag.Duration("prebuffer", 100*time.Millisecond, "audio to pile up from the phone before playing any of it")
+		prebuffer   = flag.Duration("prebuffer", 0, "extra audio to pile up before playback, on top of the jitter buffer")
+		jitter      = flag.Int("jitter", 3, "packets of playout delay, which is also the reordering window, 0 to disable")
 		conceal     = flag.Duration("conceal", 60*time.Millisecond, "how long a missing stretch fades out for, 0 to leave holes silent")
 	)
 	flag.Parse()
@@ -40,12 +41,12 @@ func main() {
 	audio.SetConcealFade(int(conceal.Milliseconds()))
 
 	if err := run(*listDevices, sipsrv.Account{User: *account, Password: *password, Realm: *realm},
-		*bind, *port, *capture, *playback, *callerID, *prebuffer); err != nil {
+		*bind, *port, *capture, *playback, *callerID, *prebuffer, *jitter); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(listDevices bool, account sipsrv.Account, bind string, port int, capture, playback, callerID string, prebuffer time.Duration) error {
+func run(listDevices bool, account sipsrv.Account, bind string, port int, capture, playback, callerID string, prebuffer time.Duration, jitter int) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
@@ -84,7 +85,7 @@ func run(listDevices bool, account sipsrv.Account, bind string, port int, captur
 		return err
 	}
 
-	call, err := srv.Ring(ctx, callerID)
+	call, err := srv.Ring(ctx, callerID, jitter)
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func run(listDevices bool, account sipsrv.Account, bind string, port int, captur
 			log.Printf("hanging up: %v", err)
 		}
 	}()
-	log.Printf("answered, codec %s, bridging %q to %q", call.Codec, capture, playback)
+	log.Printf("answered, codec %s, jitter buffer %d packets, bridging %q to %q", call.Codec, jitter, capture, playback)
 
 	var counters bridge.Counters
 	err = bridge.Run(ctx, call,

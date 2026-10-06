@@ -94,8 +94,13 @@ absorbed them.
 
 Compare concealed against the packets that never arrived, which is the difference between
 the two packet counts times 20 milliseconds. When the two are equal, every hole was a lost
-packet and a deeper `-prebuffer` will not help. When concealed is the larger of the two,
-the excess came from packets that arrived too late, and more prebuffer will remove it.
+packet and nothing short of a better network will help. When concealed is the larger of
+the two, the excess came from packets that arrived too late, and a larger `-jitter` will
+remove it.
+
+`sequence duplicate` warnings mean packets arriving out of order. They should be rare with
+the jitter buffer on, because putting them back in order is its job; a steady stream of
+them means `-jitter` is too small for this network.
 
 ### Options
 
@@ -108,6 +113,9 @@ the excess came from packets that arrived too late, and more prebuffer will remo
 -capture    device a meeting plays into (default "BlackHole 2ch")
 -playback   device a meeting records from (default "BlackHole 16ch")
 -caller-id  display name the phone shows (default "Sirius")
+-jitter     packets of playout delay and reordering window (default 3, 20ms each)
+-conceal    how long a missing stretch fades out for, 0 leaves holes silent (default 60ms)
+-prebuffer  extra audio to pile up before playback, on top of the jitter buffer
 -devices    list host audio devices and exit
 ```
 

@@ -68,7 +68,11 @@ func (s *Server) Address() string { return fmt.Sprintf("%s:%d", s.host, s.port) 
 // Ring calls the registered phone. callerID becomes the display name the phone shows,
 // which is the whole trick behind saying which meeting is ringing: it travels in the
 // From header, so no platform has to cooperate.
-func (s *Server) Ring(ctx context.Context, callerID string) (*Call, error) {
+//
+// jitterPackets is how many packets of playout delay to hold, which is also the window
+// the buffer has to put reordered packets back in sequence. Zero turns the buffer off
+// and hands packets over in arrival order.
+func (s *Server) Ring(ctx context.Context, callerID string, jitterPackets int) (*Call, error) {
 	contact, ok := s.Registrar.Contact()
 	if !ok {
 		return nil, errors.New("no phone is registered")
@@ -95,7 +99,17 @@ func (s *Server) Ring(ctx context.Context, callerID string) (*Call, error) {
 	}
 
 	props := diago.MediaProps{}
-	payload, err := med.AudioReader(diago.WithAudioReaderMediaProps(&props))
+	readerOpts := []diago.AudioReaderOption{diago.WithAudioReaderMediaProps(&props)}
+	if jitterPackets > 0 {
+		// Wifi delivers packets out of order, and PCM samples carry no sequence
+		// number, so by the time audio reaches the bridge it is too late to put it
+		// back in order. This buffer does it here, where the numbers still exist.
+		readerOpts = append(readerOpts, diago.WithAudioReaderJitterBuffer(media.RTPJitterBufferOptions{
+			DelayPackets: jitterPackets,
+			MaxPackets:   jitterPackets * 4,
+		}))
+	}
+	payload, err := med.AudioReader(readerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("audio reader: %w", err)
 	}
