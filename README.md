@@ -120,7 +120,7 @@ in latency, 20ms per packet, on what the people in the meeting hear when you spe
 -caller-id  display name the phone shows (default "Sirius")
 -jitter     packets of playout delay, 20ms each (default 10, 0 disables)
 -conceal    how long a missing stretch fades out for, 0 leaves holes silent (default 60ms)
--prebuffer  extra audio to pile up before playback, on top of the jitter buffer
+-prebuffer  extra audio to pile up before playback, on top of the jitter buffer (default none)
 -devices    list host audio devices and exit
 ```
 
