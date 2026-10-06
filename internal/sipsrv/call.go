@@ -20,6 +20,12 @@ import (
 // RingTimeout is how long Sirius lets the phone ring before giving up.
 const RingTimeout = 30 * time.Second
 
+// jitterWindowPackets is how far ahead of the packet being played the buffer will hold
+// others, which is also how many slots it allocates. It costs memory and tolerance for
+// bursts, never latency, so it is generous: wifi delivers in clumps, and a window that
+// fills blocks the socket read until the kernel starts discarding.
+const jitterWindowPackets = 100
+
 // Server is the SIP endpoint: it listens on the network, answers the phone's REGISTER,
 // and places calls to whatever phone is registered.
 type Server struct {
@@ -106,7 +112,7 @@ func (s *Server) Ring(ctx context.Context, callerID string, jitterPackets int) (
 		// back in order. This buffer does it here, where the numbers still exist.
 		readerOpts = append(readerOpts, diago.WithAudioReaderJitterBuffer(media.RTPJitterBufferOptions{
 			DelayPackets: jitterPackets,
-			MaxPackets:   jitterPackets * 4,
+			MaxPackets:   jitterWindowPackets,
 		}))
 	}
 	payload, err := med.AudioReader(readerOpts...)
