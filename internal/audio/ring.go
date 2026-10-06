@@ -24,6 +24,11 @@ var (
 	concealFade    = Samples(60) // how long the repeat takes to fall to silence
 )
 
+// SetConcealFade changes how long a hole takes to fade to silence, and turns
+// concealment off entirely at zero. Call it before opening any device: it exists so a
+// listening test has something to compare against, not as a runtime control.
+func SetConcealFade(milliseconds int) { concealFade = Samples(milliseconds) }
+
 // Ring is the buffer between a real-time audio callback and an ordinary goroutine.
 //
 // The callback cannot block, so when the two sides fall out of step the Ring drops or
@@ -121,7 +126,7 @@ func (r *Ring) Read(p []int16) {
 // conceal fills p by repeating recent audio, fading to silence so that a long gap goes
 // quiet instead of buzzing. With nothing to repeat yet it writes silence.
 func (r *Ring) conceal(p []int16) {
-	if r.historyLen == 0 {
+	if r.historyLen == 0 || concealFade == 0 {
 		for i := range p {
 			p[i] = 0
 		}
