@@ -103,9 +103,10 @@ exists to fix, so they should not appear at all while it is on.
 
 `-jitter` is worth tuning to the network. The delay has to cover how late packets actually
 run, because one that arrives after its turn is discarded instead of being played out of
-order. Too low shows up as loss rather than as stutter: on a home wifi, three packets of
-delay cost a further eight per cent of the stream where ten cost nothing. Too high is paid
-in latency, 20ms per packet, on what the people in the meeting hear when you speak.
+order. Too low shows up as loss rather than as stutter: on a home wifi where gaps averaged
+108ms, three packets of delay cost a further ten per cent of the stream while seven cost
+nothing. Too high is paid in latency, 20ms per packet, on what the people in the meeting
+hear when you speak.
 
 ### Options
 
@@ -118,7 +119,7 @@ in latency, 20ms per packet, on what the people in the meeting hear when you spe
 -capture    device a meeting plays into (default "BlackHole 2ch")
 -playback   device a meeting records from (default "BlackHole 16ch")
 -caller-id  display name the phone shows (default "Sirius")
--jitter     packets of playout delay, 20ms each (default 10, 0 disables)
+-jitter     packets of playout delay, 20ms each (default 7, 0 disables)
 -conceal    how long a missing stretch fades out for, 0 leaves holes silent (default 60ms)
 -prebuffer  extra audio to pile up before playback, on top of the jitter buffer (default none)
 -devices    list host audio devices and exit

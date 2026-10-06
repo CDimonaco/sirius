@@ -33,7 +33,7 @@ func main() {
 		playback    = flag.String("playback", "BlackHole 16ch", "device a meeting records from, matched by substring")
 		callerID    = flag.String("caller-id", "Sirius", "display name the phone shows")
 		prebuffer   = flag.Duration("prebuffer", 0, "extra audio to pile up before playback, on top of the jitter buffer")
-		jitter      = flag.Int("jitter", 10, "packets of playout delay, each 20ms, which also reorders what wifi delivers out of order")
+		jitter      = flag.Int("jitter", 7, "packets of playout delay, each 20ms, which also reorders what wifi delivers out of order")
 		conceal     = flag.Duration("conceal", 60*time.Millisecond, "how long a missing stretch fades out for, 0 to leave holes silent")
 	)
 	flag.Parse()
